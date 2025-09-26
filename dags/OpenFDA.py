@@ -50,10 +50,10 @@ default_args = {
 }
 
 dag = DAG(
-    'openfda_food_etl',
+    dag_id='openfda_food_etl',
     default_args=default_args,
     description='ETL OpenFDA Food Enforcement para BigQuery',
-    schedule_interval='@monthly',
+    schedule='@monthly',
     start_date=datetime(2023, 1, 1),
     catchup=False,
 )
@@ -71,5 +71,6 @@ save_task = PythonOperator(
 )
 
 fetch_task >> save_task
+
 
 
