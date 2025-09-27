@@ -6,10 +6,12 @@ import requests
 
 def fetch_openfda_food(ds, ti, **context):
     from airflow.operators.python import get_current_context
+
     context = get_current_context()
-    execution_date = context['dag_run'].execution_date
+    execution_date = context["logical_date"]
     year = execution_date.year
     month = execution_date.month
+
 
     # intervalo mensal
     start_date = f"{year}{month:02d}01"
@@ -71,6 +73,7 @@ save_task = PythonOperator(
 )
 
 fetch_task >> save_task
+
 
 
 
