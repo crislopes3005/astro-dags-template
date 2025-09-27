@@ -34,7 +34,7 @@ def fetch_and_to_gbq():
 
     # API OpenFDA (Food Enforcement Reports / Recalls)
     url = "https://api.fda.gov/food/enforcement.json"
-    params = {"limit": 100}  # limite de registros por chamada
+    params = {"limit": 1000}  # limite de registros por chamada
 
     r = requests.get(url, params=params, timeout=30)
     r.raise_for_status()
@@ -111,7 +111,7 @@ def fetch_and_to_gbq():
 @dag(
     default_args=DEFAULT_ARGS,
     schedule="0 0 * * *",  # roda diariamente à meia-noite UTC
-    start_date=pendulum.datetime(2025, 9, 17, tz="UTC"),
+    start_date=pendulum.datetime(2024, 9, 17, tz="UTC"),
     catchup=True,
     owner_links={
         "Alex Lopes": "mailto:alexlopespereira@gmail.com",
@@ -123,6 +123,7 @@ def food_recalls_etl_bigquery():
     fetch_and_to_gbq()
 
 dag = food_recalls_etl_bigquery()
+
 
 
 
