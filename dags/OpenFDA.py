@@ -1,17 +1,25 @@
+"""
+OpenFDA Food Enforcement DAG
+Adaptada para Airflow 2.7+
+"""
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.operators.python import get_current_context
+from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from datetime import datetime, timedelta
 import pandas as pd
 import requests
 
-def fetch_openfda_food(ds, ti, **context):
-    from airflow.operators.python import get_current_context
 
+# -------------------------------
+# Função para coletar dados da API
+# -------------------------------
+def fetch_openfda_food(**kwargs):
     context = get_current_context()
     execution_date = context["logical_date"]
     year = execution_date.year
     month = execution_date.month
-
 
     # intervalo mensal
     start_date = f"{year}{month:02d}01"
@@ -22,57 +30,74 @@ def fetch_openfda_food(ds, ti, **context):
 
     if r.status_code == 200:
         data = r.json()
-        df = pd.DataFrame(data['results'])
-        df["report_date"] = pd.to_datetime(df["report_date"])
+        df = pd.DataFrame(data.get("results", []))
+        if not df.empty:
+            # garante que report_date é string serializável
+            df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce").astype(str)
     else:
         df = pd.DataFrame([])
 
-    ti.xcom_push(key="openfda_food", value=df.to_dict())
+    # envia para o XCom em formato seguro
+    kwargs["ti"].xcom_push(key="openfda_food", value=df.to_dict(orient="list"))
 
-def save_to_bigquery(ds, ti, **context):
-    from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 
-    data_dict = ti.xcom_pull(task_ids='fetch_openfda_food', key='openfda_food')
+# -------------------------------
+# Função para salvar no BigQuery
+# -------------------------------
+def save_to_bigquery(**kwargs):
+    data_dict = kwargs["ti"].xcom_pull(task_ids="fetch_openfda_food", key="openfda_food")
+
     if data_dict:
         df = pd.DataFrame.from_dict(data_dict)
+        if not df.empty:
+            # reconverte a coluna para datetime
+            df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce")
 
-        bq_hook = BigQueryHook(gcp_conn_id="google_cloud_default", use_legacy_sql=False)
-        bq_hook.insert_rows_dataframe(
-            dataset_id="openfda_dataset",
-            table_id="food_enforcement",
-            dataframe=df,
-            project_id="mba2025-470818"
-        )
+            bq_hook = BigQueryHook(
+                gcp_conn_id="google_cloud_default",
+                use_legacy_sql=False
+            )
 
+            bq_hook.insert_rows_dataframe(
+                dataset_id="openfda_dataset",
+                table_id="food_enforcement",
+                dataframe=df,
+                project_id="SEU_PROJETO_ID"  # <-- ajuste aqui
+            )
+
+
+# -------------------------------
+# Configuração da DAG
+# -------------------------------
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    "owner": "airflow",
+    "depends_on_past": False,
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
 }
 
-dag = DAG(
-    dag_id='openfda_food_etl',
+with DAG(
+    dag_id="openfda_food_etl",
     default_args=default_args,
-    description='ETL OpenFDA Food Enforcement para BigQuery',
-    schedule='@monthly',
+    description="ETL OpenFDA Food Enforcement para BigQuery",
+    schedule="@monthly",               # substitui schedule_interval
     start_date=datetime(2023, 1, 1),
     catchup=False,
-)
+    tags=["openfda", "food", "bigquery"],
+) as dag:
 
-fetch_task = PythonOperator(
-    task_id="fetch_openfda_food",
-    python_callable=fetch_openfda_food,
-    dag=dag,
-)
+    fetch_task = PythonOperator(
+        task_id="fetch_openfda_food",
+        python_callable=fetch_openfda_food,
+    )
 
-save_task = PythonOperator(
-    task_id="save_to_bigquery",
-    python_callable=save_to_bigquery,
-    dag=dag,
-)
+    save_task = PythonOperator(
+        task_id="save_to_bigquery",
+        python_callable=save_to_bigquery,
+    )
 
-fetch_task >> save_task
+    fetch_task >> save_task
+
 
 
 
