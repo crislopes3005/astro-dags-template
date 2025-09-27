@@ -14,7 +14,7 @@ GCP_PROJECT  = "mba2025-470818"         # seu projeto GCP
 BQ_DATASET   = "food"                   # dataset no BigQuery
 BQ_TABLE     = "food_recalls"           # tabela destino
 BQ_LOCATION  = "US"                     # dataset location
-GCP_CONN_ID  = "google_cloud_default"   # conexão no Airflow
+GCP_CONN_ID  = "google_cloud_defauld"   # conexão no Airflow
 # ====================
 
 DEFAULT_ARGS = {
@@ -123,6 +123,7 @@ def food_recalls_etl_bigquery():
     fetch_and_to_gbq()
 
 dag = food_recalls_etl_bigquery()
+
 
 
 
